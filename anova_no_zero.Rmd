@@ -1,0 +1,245 @@
+---
+title: "ANOVA_no_zero"
+author: "Gulzina Kuttubekova, Meltem Ozcans"
+date: "12/5/2019"
+output: pdf_document
+---
+
+```{r, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape)
+library(gdata)
+library(RColorBrewer)
+library(visdat)
+library(naniar)
+library(inspectdf)
+library(corrplot)
+library(splitstackshape)
+library(lmtest)
+```
+
+
+```{r}
+games <- read.csv('games.csv')
+sales <- read.csv('sales.csv')
+```
+
+```{r}
+# log-transform and remove zeros
+sales_nonzero <- sales %>% select_all() %>% 
+    filter(Sales != 0) 
+```
+
+
+# Hypothesis 1:
+```{r}
+genre_region <- lm(log(Sales) ~ Genre*Region, data = sales_nonzero)
+genre_region %>% anova()
+```
+
+Check the assumptions:
+```{r}
+plot(genre_region)
+```
+
+Based on the QQ plot and residual plot there isn't much deviation from the normality and homogenity assumptions. There appears to be a small pattern in residual plot, we will check if it's significant by additional tests:
+```{r}
+shapiro.test(genre_region$residuals
+             [sample(1:length(sales_nonzero$Platform), 5000)])
+```
+
+We see that the normality assumption is actually violated. What about homogeneity? - It's also violated!!! There are no outliers and influential points.
+```{r}
+bptest(genre_region)
+```
+
+WLS method might be a potential remedy for the assumptions violations. So try this:
+```{r}
+varfunc_gen_reg <- lm(log(genre_region$residuals^2) ~ Genre*Region, 
+                      data = sales_nonzero)
+sales_nonzero$varfunc_gen_reg <- exp(varfunc_gen_reg$fitted.values)
+genre_region_gls <- lm(log(Sales) ~ Genre*Region, 
+                       weights = 1/sqrt(varfunc_gen_reg),
+                       data = sales_nonzero)
+```
+
+Check normality:
+```{r}
+shapiro.test(genre_region_gls$residuals
+             [sample(1:length(sales_nonzero$Platform), 5000)])
+```
+
+P-value had increased from previous LS case, but still is less than 0.05. Hence WLS method didn't help to resolve the abnormality :D issue.
+
+```{r}
+bptest(genre_region_gls)
+```
+
+Homogeneity is also still violated!!!
+
+
+
+
+
+
+
+# Hypothesis 2:
+```{r}
+dev_region <- lm(log(Sales) ~ Main_Developer*Region, data = sales_nonzero)
+dev_region %>% anova()
+```
+
+Check the assumptions:
+```{r}
+plot(dev_region)
+```
+
+Based on the QQ plot and residual plot there isn't much deviation from the normality and homogenity assumptions. There appears to be a small pattern in residual plot, we will check if it's significant by additional tests:
+```{r}
+shapiro.test(dev_region$residuals
+             [sample(1:length(sales_nonzero$Platform), 5000)])
+```
+
+We see that the normality assumption is actually violated. What about homogeneity? - It's also violated!!! There are no outliers and influential points.
+```{r}
+bptest(dev_region)
+```
+
+WLS method might be a potential remedy for the assumptions violations. So try this:
+```{r}
+varfunc_dev_reg <- lm(log(dev_region$residuals^2) ~ Main_Developer*Region, 
+                      data = sales_nonzero)
+sales_nonzero$varfunc_dev_reg <- exp(varfunc_dev_reg$fitted.values)
+dev_region_gls <- lm(log(Sales) ~ Main_Developer*Region, 
+                       weights = 1/sqrt(varfunc_dev_reg),
+                       data = sales_nonzero)
+```
+
+Check normality:
+```{r}
+shapiro.test(dev_region_gls$residuals
+             [sample(1:length(sales_nonzero$Platform), 5000)])
+```
+
+P-value is strictly less than 0.05 -- reject the null hypothesis stating the normality of residuals! NOT normal!!!! Hence WLS method didn't help to resolve the abnormality :D issue.
+
+```{r}
+bptest(dev_region_gls)
+```
+
+Homogeneity is also still violated!!!
+
+
+
+
+
+# Hypothesis 3
+
+```{r}
+pub_region <- lm(log(Sales) ~ Main_Publisher*Region, data = sales_nonzero)
+pub_region %>% anova()
+```
+
+Check the assumptions:
+```{r}
+plot(pub_region)
+```
+
+Based on the QQ plot and residual plot there isn't much deviation from the normality and homogenity assumptions. There appears to be a small pattern in residual plot, we will check if it's significant by additional tests:
+```{r}
+shapiro.test(pub_region$residuals
+             [sample(1:length(sales_nonzero$Platform), 5000)])
+```
+
+We see that the normality assumption is actually violated. What about homogeneity? - It's also violated!!! There are no outliers and influential points.
+```{r}
+bptest(pub_region)
+```
+
+WLS method might be a potential remedy for the assumptions violations. So try this:
+```{r}
+varfunc_pub_reg <- lm(log(pub_region$residuals^2) ~ Main_Publisher*Region, 
+                      data = sales_nonzero)
+sales_nonzero$varfunc_pub_reg <- exp(varfunc_pub_reg$fitted.values)
+pub_region_gls <- lm(log(Sales) ~ Main_Publisher*Region, 
+                       weights = 1/sqrt(varfunc_pub_reg),
+                       data = sales_nonzero)
+```
+
+Check normality:
+```{r}
+shapiro.test(pub_region_gls$residuals
+             [sample(1:length(sales_nonzero$Platform), 5000)])
+```
+
+
+P-value has increased but still strictly less than 0.05 -- reject the null hypothesis stating the normality of residuals! NOT normal!!!! Hence WLS method didn't help to resolve the abnormality :D issue.
+
+```{r}
+bptest(pub_region_gls)
+```
+
+Homogeneity is also still violated!!!
+
+
+
+
+# Hypothesis 4
+
+
+```{r}
+gen_dec <- lm(log(Sales) ~ Genre*Decade, data = sales_nonzero)
+gen_dec %>% anova()
+```
+
+Check the assumptions:
+```{r}
+plot(gen_dec)
+```
+
+Based on the QQ plot and residual plot there isn't much deviation from the normality and homogenity assumptions. There appears to be a small pattern in residual plot, we will check if it's significant by additional tests:
+```{r}
+shapiro.test(gen_dec$residuals
+             [sample(1:length(sales_nonzero$Platform), 5000)])
+```
+
+We see that the normality assumption is actually violated. What about homogeneity? - It's also violated!!! There are no outliers and influential points.
+```{r}
+bptest(gen_dec)
+```
+
+WLS method might be a potential remedy for the assumptions violations. So try this:
+```{r}
+varfunc_gen_dec <- lm(log(gen_dec$residuals^2) ~ Genre*Decade, 
+                      data = sales_nonzero)
+sales_nonzero$varfunc_gen_dec <- exp(varfunc_gen_dec$fitted.values)
+gen_dec_gls <- lm(log(Sales) ~ Genre*Decade, 
+                       weights = 1/sqrt(varfunc_gen_dec),
+                       data = sales_nonzero)
+```
+
+Check normality:
+```{r}
+shapiro.test(gen_dec_gls$residuals
+             [sample(1:length(sales_nonzero$Platform), 5000)])
+```
+
+
+P-value is strictly less than 0.05 -- reject the null hypothesis stating the normality of residuals! NOT normal!!!! Hence WLS method didn't help to resolve the abnormality :D issue.
+
+```{r}
+bptest(gen_dec_gls)
+```
+
+Homogeneity is also still violated!!!
+
+
+
+
+
+
+
+
+
+
