@@ -1,0 +1,193 @@
+---
+title: "Additional_mlr"
+author: "Gulzina Kuttubekova, Meltem Ozcan"
+date: "12/6/2019"
+output: pdf_document
+---
+
+```{r, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape)
+library(gdata)
+library(RColorBrewer)
+library(visdat)
+library(naniar)
+library(inspectdf)
+library(corrplot)
+library(splitstackshape)
+library(lmtest)
+```
+
+```{r}
+games <- read.csv('games.csv')
+sales <- read.csv('sales.csv')
+```
+
+```{r}
+# since Sales has many zeros, log-transformation leads to -Inf. Hence we add some epsilon = 0.000001 to those values
+sales$Sales = sales$Sales + 0.000001
+```
+
+```{r}
+set.seed(13)
+sets <- stratified(sales, c('Platform', 'Genre', 'Publisher',
+                            'Developer', 'Rating', 'Decade',
+                            'Platform_Company', 'Platform_Gen',
+                            'Family_Platform', 'Main_Developer',
+                            'Developer_Country', 'Main_Publisher',
+                            'Region'), 0.7, bothSets = TRUE)
+
+train_sales <- sets$SAMP1
+test_sales <- sets$SAMP2
+```
+
+We'll try additional 3 models with fixed number of explanatory variables, and the ineraction term found significant in the hypothesis part. We fixed the number = 5, to reduce the number of coefficient parameters to be estimated and to sooth the 'curse of dimensionality'. We generated 4 sets with the combinations of explanatory variables. If we were to select the best model among all possible 5-element combinations of 10 explanatory variables we presented in the first MLR model, there would be 252 models in total. So we skipped that method and concentrated on keeping the variables that can be controlled by company developing/publishing the game. Hence, 3 main explanatory variables are fixed: \{Region, Genre, Rating\}. We excluded Decade since its's out of human/company control and Critic_Count. We made sure at least one model contains a Critic_Score. The remaining variables were chosen from the family of variables. We treated variables \{Main_Developer, Main_Publisher\} as one family, since they are usually interconnected and \{Family_Platform, Platform_Company\} as one family. 
+
+
+Hence, we have the following sets:
+
+set1 for model3: \{Region, Genre, Rating, Critic_Score, Platform_Gen\}
+set2 for model4: \{Region, Genre, Rating, Main_Publisher, Platform_Gen\}
+set3 for model5: \{Region, Genre, Rating, Main_Developer,  Platform_Company\}
+set4 for model6: \{Region, Genre, Rating, \} to see if the major variation in sales response variable is captured by this three only!!!!!
+
+
+# MLR 3 - on the dataset with zeros, interactions are kept
+```{r}
+mlr3 <- lm(log(Sales) ~ Region + Genre + Rating + 
+               Critic_Score + Platform_Gen +
+               Region:Genre, data = train_sales)
+mlr3 %>% summary()
+```
+
+```{r}
+anova(mlr3)
+```
+ Still all 5 variables including the interactions are significant. Adj-R^2 is 0.4157, which is relatively good since we dropped half of the variables from the previous two models. We will refer to 2 those models as "full" and "reduced" to the models 3,4,5,6. Now we do some model assessment. Pics are not included here, they are approximately the same for all.
+
+We observed the same trend on assumptions violations! We'll check all possible model assessments at the end. 
+
+
+
+
+# MLR 4 - on the dataset with zeros, interactions are kept
+```{r}
+mlr4 <- lm(log(Sales) ~ Region + Genre + Rating + 
+               Main_Publisher + Platform_Gen +
+               Region:Genre + Region:Main_Publisher, data = train_sales)
+mlr4 %>% summary()
+```
+
+```{r}
+anova(mlr4)
+```
+ Still all 5 variables including the interactions are significant. Adj-R^2 is 0.4297, which is relatively good since we dropped half of the variables from the previous two models. Asj-R^2 is larger than for MLR3. Now we do some model assessment. The same plots.
+
+We observed the same trend on assumptions violations! We'll check all possible model assessments at the end. 
+
+
+
+
+
+
+# MLR 5
+```{r}
+mlr5 <- lm(log(Sales) ~ Region + Genre + Rating + 
+               Main_Developer + Platform_Company +
+               Region:Genre + Region:Main_Developer, data = train_sales)
+mlr5 %>% summary()
+```
+
+```{r}
+anova(mlr5)
+```
+ Still all 5 variables including the interactions are significant. Adj-R^2 is 0.4094, dropped from mlr3 and mlr4. Model violations are the same.
+
+
+
+
+
+
+# MLR 6
+```{r}
+mlr6 <- lm(log(Sales) ~ Region + Genre + Rating + Region:Genre, 
+           data = train_sales)
+mlr6 %>% summary()
+```
+
+```{r}
+anova(mlr6)
+```
+ Still all 3 variables including the interactions are significant. Adj-R^2 is 0.3556, decreased from all previous cases. Model violations are the same.
+
+We observed the same trend on assumptions violations! We'll check all possible model assessments at the end. 
+
+
+# Model Comparison
+
+
+Predictions and RMSE:
+```{r}
+# rmse on train data
+sqrt(sum((mlr3$fitted.values - train_sales$Sales)^2) / length(mlr3$fitted.values))
+
+
+predicted_sales <- predict(mlr3, test_sales[,c(3,5,10,14,19)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+```{r}
+# rmse on train data
+sqrt(sum((mlr4$fitted.values - train_sales$Sales)^2) / length(mlr4$fitted.values))
+
+
+predicted_sales <- predict(mlr4, test_sales[,c(3,10,14,18,19)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+```{r}
+# rmse on train data
+sqrt(sum((mlr5$fitted.values - train_sales$Sales)^2) / length(mlr5$fitted.values))
+
+
+predicted_sales <- predict(mlr5, test_sales[,c(3, 10, 16, 13, 19)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+```{r}
+# rmse on train data
+sqrt(sum((mlr6$fitted.values - train_sales$Sales)^2) / length(mlr6$fitted.values))
+
+
+predicted_sales <- predict(mlr6, test_sales[,c(3, 10, 19)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+Create dataframe for model assessment:
+```{r}
+df <- data.frame(AIC = c(AIC(mlr3), AIC(mlr4), AIC(mlr5), AIC(mlr6)),
+                 BIC = c(BIC(mlr3), BIC(mlr4), BIC(mlr5), BIC(mlr6)),
+                 AdjRsq = c(0.4157, 0.4297, 0.4094, 0.3556),
+                 trainRMSE = c(6.700798, 6.731926, 6.694827, 6.598686),
+                 testRMSE = c(6.53495, 6.807955, 6.713769, 6.718925))
+row.names(df) <- c('MLR3', 'MLR4', 'MLR5', 'MLR6')
+df
+```
+
+
+
+
+
