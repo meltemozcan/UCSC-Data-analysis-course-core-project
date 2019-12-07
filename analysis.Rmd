@@ -1,0 +1,486 @@
+---
+title: "Analysis"
+author: "Gulzina Kuttubekova, Meltem Ozcan"
+date: "11/30/2019"
+output: pdf_document
+---
+
+```{r, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape)
+library(gdata)
+library(RColorBrewer)
+library(visdat)
+library(naniar)
+library(inspectdf)
+library(corrplot)
+library(splitstackshape)
+library(lmtest)
+library(MASS)
+```
+
+
+```{r}
+games <- read.csv('games.csv')
+sales <- read.csv('sales.csv')
+```
+
+
+# ANOVA (use sales.csv)
+
+In this section, we want to test if there are significant interactions between the categorical variables of our interest: (Genre & ) Write the hypotheses for each ANOVA!!!
+
+
+
+Write the general model here: $$y = x'\beta + epsilon$$
+
+
+
+Assumptions: 
+
+    - We will ignore all othe explanatory varaibles, and test the interactions of our interest only!
+    - Even if find significant interactions, we should keep in mind that interaction may be significant only because there are no other variables inluded. What I mean: interaction can loose their significance in the presence of other variables.
+    - We'll still include interactions, which were found significant to our MLR prediction model. And compare AIC/BIC/R-adjusted of the MLR with/without interactions and omit them if really necessary
+    
+
+
+## Hypotheses 1 (Genre vs Region):
+
+- Write up the null/alternative
+
+- Model fit
+
+```{r}
+# since Sales has many zeros, log-transformation leads to -Inf. Hence we add some epsilon = 0.000001 to those values
+sales$Sales = sales$Sales + 0.000001
+```
+
+```{r}
+genre_region <- lm(log(Sales) ~ Genre*Region, data = sales)
+varfunc_gen_reg <- lm(log(genre_region$residuals^2) ~ Genre*Region, 
+                      data = sales)
+sales$varfunc_gen_reg <- exp(varfunc_gen_reg$fitted.values)
+genre_region_gls <- lm(log(Sales) ~ Genre*Region, 
+                       weights = 1/sqrt(varfunc_gen_reg),
+                       data = sales)
+anova(genre_region_gls)
+```
+
+Conclusion: F-value = 29.224 with 33 degrees of freedom and p-value = 2.2e-16. Hence we reject the null hypothesis and conlude that the there is an interaction between genre and region (note that when only these two variables are included in the model).
+
+- Interactions plot:
+```{r}
+with(data=sales, expr={
+    interaction.plot(Genre, Region, response=Sales)
+    interaction.plot(Region, Genre, response=Sales,
+                     ylab = 'mean of log(Sales)')})
+```
+
+- Model checking:
+```{r}
+plot(genre_region_gls)
+```
+
+Comments: There is some pattern in the distribution of residuals, however the variance is stable, i.e. it's approximately the same for all. Hence, we conclude that the homogenity assumption is not violated, however the normality assumption might be violated. It also can be noted from the QQ-plot. We'll test it by shapiro-wilk test:
+
+```{r}
+shapiro.test(genre_region_gls$residuals[1:5000])
+```
+
+P-value < 2.2e-16 < 0.05, so the null hypothesis stating that residuals are normally distributed is rejected. 
+
+```{r}
+# Breusch-Pagan test
+bptest(genre_region)
+```
+
+
+
+
+
+
+## Hypotheses 2 (Developer company & Region)
+
+- Write up the null/alternative
+
+- Model fit
+```{r}
+dev_region <- lm(log(Sales) ~ Main_Developer*Region, data = sales)
+varfunc_dev_reg <- lm(log(dev_region$residuals^2) ~ Main_Developer*Region, 
+                      data = sales)
+sales$varfunc_dev_reg <- exp(varfunc_dev_reg$fitted.values)
+dev_region_gls <- lm(log(Sales) ~ Main_Developer*Region, 
+                       weights = 1/sqrt(varfunc_dev_reg),
+                       data = sales)
+anova(dev_region_gls)
+```
+
+Conclusion: F-value = 23.512 with 30 degrees of freedom and p-value < 2.2e-16 < 0.05. Hence we reject the null hypothesis and conlude that the there is an interaction between genre and developer company (note that when only these two variables are included in the model).
+
+
+- Interaction plot:
+```{r}
+with(data=sales, expr={
+    interaction.plot(Main_Developer, Region, response=Sales)
+    interaction.plot(Region, Main_Developer, response=Sales,
+                     ylab = 'mean of log(Sales)')})
+```
+
+- Model checking:
+```{r}
+plot(dev_region)
+```
+
+Comments: There is some pattern in the distribution of residuals, however the variance is stable, i.e. it's approximately the same for all. Hence, we conclude that the homogenity assumption is not violated, however the normality assumption might be violated. It also can be noted from the QQ-plot. We'll test it by shapiro-wilk test:
+
+```{r}
+shapiro.test(dev_region_gls$residuals[1:5000])
+```
+
+P-value < 2.2e-16 < 0.05, so the null hypothesis stating that residuals are normally distributed is rejected. 
+
+```{r}
+# Breusch-Pagan test
+bptest(dev_region_gls)
+```
+
+
+
+
+
+
+## Hypotheses 3 (Publisher company & Region)
+
+- Write up the null/alternative
+
+- Model fit
+```{r}
+publish_region <- lm(log(Sales) ~ Main_Publisher*Region, data = sales)
+publish_region <- lm(log(Sales) ~ Main_Publisher*Region, data = sales)
+varfunc_publish_reg <- lm(log(publish_region$residuals^2) ~
+                              Main_Publisher*Region, data = sales)
+sales$varfunc_publish_reg <- exp(varfunc_publish_reg$fitted.values)
+publish_region_gls <- lm(log(Sales) ~ Main_Publisher*Region, 
+                       weights = 1/sqrt(varfunc_publish_reg),
+                       data = sales)
+anova(publish_region_gls)
+```
+
+- Conclusion: F-value = 36.592 with 30 degrees of freedom and p-value < 2.2e-16 < 0.05. Hence we reject the null hypothesis and conlude that the there is an interaction between genre and publisher company (note that when only these two variables are included in the model).
+
+
+- Interaction plot:
+```{r}
+with(data=sales, expr={
+    interaction.plot(Main_Publisher, Region, response=Sales)
+    interaction.plot(Region, Main_Publisher, response=Sales,
+                     ylab = 'mean of log(Sales)')})
+```
+
+
+- Model checking:
+```{r}
+plot(publish_region)
+```
+
+Comments: There is some pattern in the distribution of residuals, however the variance is stable, i.e. it's approximately the same for all. Hence, we conclude that the homogenity assumption is not violated, however the normality assumption might be violated. It also can be noted from the QQ-plot. We'll test it by shapiro-wilk test:
+
+```{r}
+shapiro.test(publish_region_gls$residuals[1:5000])
+```
+
+P-value < 2.2e-16 < 0.05, so the null hypothesis stating that residuals are normally distributed is rejected.
+
+```{r}
+# Breusch-Pagan test
+bptest(publish_region_gls)
+```
+
+
+
+
+
+
+
+## Hypotheses 4 (Decade & Genre)
+
+- Write up the null/alternative
+
+- Model fit
+```{r}
+decade_genre <- lm(log(Sales) ~ Decade*Genre, data = sales)
+varfunc_dec_gen <- lm(log(decade_genre$residuals^2) ~ Decade*Genre, 
+                      data = sales)
+sales$varfunc_dec_gen <- exp(varfunc_dec_gen$fitted.values)
+dec_gen_gls <- lm(log(Sales) ~ Decade*Genre, 
+                       weights = 1/sqrt(varfunc_dec_gen),
+                       data = sales)
+anova(dec_gen_gls)
+```
+
+- Conclusion: F-value = 3.2986 with 22 degrees of freedom and p-value = 2.668e-07 < 0.05. Hence we reject the null hypothesis and conlude that the there is an interaction between genre and decade (note that when only these two variables are included in the model).
+
+- Interaction plot:
+```{r}
+with(data=sales, expr={
+    interaction.plot(Genre, Decade, response=Sales)
+    interaction.plot(Decade, Genre, response=Sales,
+                     ylab = 'mean of log(Sales)')})
+```
+
+
+- Model checking:
+```{r}
+plot(decade_genre)
+```
+
+Comments: There is some pattern in the distribution of residuals, however the variance is stable, i.e. it's approximately the same for all. Hence, we conclude that the homogenity assumption is not violated, however the normality assumption might be violated. It also can be noted from the QQ-plot. We'll test it by shapiro-wilk test:
+
+```{r}
+shapiro.test(dec_gen_gls$residuals[1:5000])
+```
+
+P-value < 2.2e-16 < 0.05, so the null hypothesis stating that residuals are normally distributed is rejected.
+
+```{r}
+# Breusch-Pagan test
+bptest(dec_gen_gls)
+```
+
+
+
+
+### Check interaction all together with all categorical variables:
+
+Tried it. It takes hell of a time!!!! SO, let's include the intercations we already checked by ANOVA.
+
+
+
+
+
+
+
+
+# MLR (use sales.csv)
+
+Before fitting MLR, we did some EDA and already eliminated and added some new variables:
+
+    - Platform: NOT used, since there are many catgories in it. Categories in contrast, were grouped and new variables were generated
+    - Year_of_Release: NOT used (Inductive bias)
+    - Genre: USED (EDA)
+    - Publisher: NOT used, since there are many catgories in it. Categories in contrast, were grouped and new variables were generated
+    - Critic_Score : USED (have some relationship from EDA)
+    - Critic_Count: USED (have some relationship from EDA)
+    - User_Score: NOT used (collinear relationship with Critic_Score from EDA)
+    - Used_Count: NOT used (EDA & inductive bias)
+    - Developer: NOT used, since there are many categories in it. Categories in contrast, were grouped and new variables were generated
+    - Rating: USED
+    - Year_since_Release: NOT used (EDA)
+    - Decade : USED
+    - Platform_Company: USED 
+    - Platform_Gen: USED
+    - Family_Platform: USED 
+    - Main_Developer: USED
+    - Developer Country: NOT used (EDA & inductive bias: dependence with other categorical variables)
+    - Main_Publisher: USED
+    - Region: USED
+    
+Regress all USED variables on *sales* numerical response variable!
+
+
+
+Since we want to know **which** properties of games are significant in predicting the sales, region can also be treated as explanatory variable. In this part, our main goal is to 
+
+    - Identify significant variables
+    - Assess MLR prediction model on the test data
+ 
+    
+    
+Assumptions:
+
+    - Sales variable has bell-curved shape (required for iid error terms)
+    - $y = x^{\top}\beta + \epsilon$ where $y_* = sales$, and $x_i$ is an explanatory variables
+    - $\epsilon \sim N(0, \sigma)$ iid with fixed variance (homogeneity)
+    - Add some significant interactions from ANOVA results
+    - Some variables were omitted due to *inductive bias* or *EDA*
+    
+    
+1. MLR with no interactions
+
+Divide the dataset into training (70\%) and test(30\%) sets. We used stratified partitioning method, so that each level of each categorical variable is contained in equal proportion in each set.
+```{r}
+set.seed(13)
+sets <- stratified(sales, c('Platform', 'Genre', 'Publisher',
+                            'Developer', 'Rating', 'Decade',
+                            'Platform_Company', 'Platform_Gen',
+                            'Family_Platform', 'Main_Developer',
+                            'Developer_Country', 'Main_Publisher',
+                            'Region'), 0.7, bothSets = TRUE)
+
+train_sales <- sets$SAMP1
+test_sales <- sets$SAMP2
+```
+
+Fit the model
+```{r}
+mlr_without <- lm(log(Sales) ~ Genre + Critic_Score + Critic_Count + Rating +
+              Decade + Platform_Company + Platform_Gen + Family_Platform +
+              Main_Developer + Main_Publisher + Region, 
+              data = train_sales)
+mlr_without %>% summary()
+```
+
+According to results: the model with no interactions and all possible explanatory variables included has R-adj = 0.4625, s.t. only 46.25\% of variation in log(sales) is explained by the the variables \{Genre, Critic_Score, Critic_Count, Rating, Decade, Platform_Company, Platform_Gen,
+Family_Platform, Main_Developer, Main_Publisher, Region\}. Residual standard error or $RSE = 3.838$ with 24029 degrees of freedom and $RMSE = 3.833312$. The results table shows that intercept, Critic_Score, Critic_Count, along with many levels of categorical variables are statistically significant. We would also like to analyze the ANOVA table to see the significance of variables as a whole:
+
+ANOVA
+```{r}
+mlr_without %>% anova()
+```
+
+According to the ANOVA table and individual F-test p-values, each covariate is significant at 0.05 significance level given all other variables in the model. However, we still extract this model fit's p-value and do a stepwise selection/elimination of explanatory variables to achieve the *best* model according to AIC measure:
+
+Do stepwise selection of covariates:
+```{r}
+step(mlr_without)
+```
+
+The stepwise model selection suggests the original model where the AIC = 64834.75. 
+
+```{r}
+AIC(mlr_without)
+BIC(mlr_without)
+```
+
+```{r}
+plot(mlr_without)
+```
+
+
+
+```{r}
+shapiro.test(mlr_without$residuals[1000:5000])
+```
+
+```{r}
+bptest(mlr_with)
+```
+
+
+
+
+
+
+2. MLR with interactions
+
+The previous `MLR_without` model is still not the final model, so we would like to include interactions which were found (each pair individually) significant in the beginning ANOVA part:
+```{r}
+mlr_with <-  lm(log(Sales) ~ Genre + Critic_Score + Critic_Count + Rating +
+              Decade + Platform_Company + Platform_Gen + Family_Platform +
+              Main_Developer + Main_Publisher + Region +
+                  Genre:Region + Main_Developer:Region +
+                  Main_Publisher:Region + Genre:Decade, 
+              data = train_sales)
+mlr_with %>% summary()
+```
+
+Comments: type something as in previous case. $RMSE = 3.661722$. 
+
+ANOVA: 
+```{r}
+anova(mlr_with)
+```
+
+All possible variables and interactions are significant!!!
+
+Now choose model by the AIC:
+```{r}
+stepAIC(mlr_without)
+```
+
+
+```{r}
+step(mlr_with, k = log(17448))
+```
+
+KEPP this model with AIC=62858.87. AIC even decreased from the previous case. At this step, we answered our **first problem's question:** which properties of games are significant in prediction the global sales? First, we did include our subjective view, then eliminated variables by EDA (multicollinearity, dependence) and found all other variables significant. **Subsequent question (part of first):** do the sales differ regionally? According to the ANOVA, yes they differ. 
+
+We can further analyze which regions differ by using pairwise comparison tests on the one-way ANOVA:
+```{r}
+regional_diff_sales <- lm(log(Sales) ~ Region, data = train_sales)
+TukeyHSD(aov(regional_diff_sales))
+```
+
+All differences are significant. For instance, there are significantly less number of video games sold between 1985 and 2016 in Japan compared to Europe, North America and other part of the world (which is actually intuitive. I'd really wonder if it were the opposite). There are more video games sold in North America than in the other part of the world. Finally, second most selling region is Europe.
+
+
+```{r}
+AIC(mlr_with)
+BIC(mlr_with)
+```
+
+```{r}
+plot(mlr_with)
+```
+
+
+
+
+
+
+
+3. Prediction using the model we chose
+
+Least squares coefficient estimates are found in the final: ------ model. So the prediction (fitted) equation is given as follows: 
+
+- We know the $RMSE$ on the training data: 6.774657
+
+Assess accuracy on the test data by finding $\sqrt{MSE}$ on the test data: 
+```{r}
+# rmse on train data
+sqrt(sum((mlr_without$fitted.values - train_sales$Sales)^2) / length(mlr_without$fitted.values))
+
+
+predicted_sales <- predict(mlr_without, test_sales[,-c(1,2,4,7,8,9,11,17,20)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+- RMSE on the test data = 6.650445
+
+
+```{r}
+# rmse on train data
+sqrt(sum((mlr_with$fitted.values - train_sales$Sales)^2) / length(mlr_with$fitted.values))
+
+
+predicted_sales <- predict(mlr_with, test_sales[,-c(1,2,4,7,8,9,11,17,20)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+    
+    
+
+
+
+# Conclusions
+
+1. By EDA, ANOVA and MLR model fit we derived the *best* in our case, model according to AIC and BIC criteria.
+
+2. Model accuracy on the test set: the final model has a double sized root mean squared error on the test set compared to the train set, which is not surprising. 
+
+3. Model assumptions violations -- new challenges
+
+4. Old challange: non-generalizable model (look at the years ~)
+    
+5. Room for improvement:   
+    
+    
+    
+    
+    
+    
