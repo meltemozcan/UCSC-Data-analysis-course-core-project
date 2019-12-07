@@ -1,0 +1,1287 @@
+---
+title: "Exploratory and Preliminary Data Analysis of Rideshare dataset"
+author: "Gulzina Kuttubekova & Meltem Ozcan"
+date: "11/11/2019"
+output: pdf_document
+---
+
+```{r, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape)
+library(gdata)
+library(RColorBrewer)
+library(visdat)
+library(naniar)
+library(inspectdf)
+library(corrplot)
+```
+
+
+
+### Data:
+- Where did we get it? 
+    Data can be downloaded here: [Kaggle](https://www.kaggle.com/kendallgillies/video-game-sales-and-ratings)
+    
+- How it was collected?
+    <This data set contains a list of video games with sales greater than 100,000 copies along with critic and user ratings. It is a combined web scrape from `VGChartz` and `Metacritic` along with manually entered year of release values for most games with a missing year of release>. It contains game sales information starting from 1985 to 2016 years.
+
+- By whom? 
+    References: Rush Kirubi, Gregory Smith and Kendall Gillies
+
+
+#### Data summary:
+```{r}
+games <- read.csv('data/Video_Games_Sales_as_at_22_Dec_2016.csv',
+                  header = TRUE , na.strings=c("", " ", "N/A", "NA"))
+games %>% glimpse()
+```
+
+```{r, include=FALSE}
+# Convert User_Count to integer 
+games$User_Score <-  as.integer(games$User_Score)
+```
+
+The dataset contains 16719 observations and 16 variables. There are 5 categorical {Name, Platform, Genre, Publisher, Developer} and 11 numerical {Year, NA_Sales, EU_Sales, JP_Sales, Other_Sales, Global_Sales, Critic_Score, Critic_Count, User_Score, User_Count, Rating} variables. Global_Sales which is the sum of four regional sales variables for Japan, EU, North America, and the rest of the world. 
+
+```{r}
+describe <- function(var) {
+# This function summarizes each variable. It prints out descriptive sample 
+# statistics for numerical variables, and contingency table for categorical 
+# variables.  
+#     
+# Args:
+#   var: variable in a vector form
+#    
+# Returns:
+#   Summary analysis
+    if (is.numeric(var)) {
+        summary(var)
+    }
+        
+    else if (is.factor(var)) {
+        if (length(unique(var)) > 40) {
+            sprintf('There are %d unique cases', length(unique(var)))
+        } else {
+            table(var)
+        }
+    }
+}
+```
+
+
+`describe()` function applied on each variable in Games dataset, outputs the following result:
+```{r}
+lapply(games, describe)
+```
+
+```{r}
+# We can achieve the same analysis with the summary function()
+games %>% summary()
+```
+
+
+
+#### Data cleaning: 
+
+Display NA's
+```{r}
+vis_miss(games)
+```
+
+```{r}
+inspect_na(games)
+```
+
+```{r}
+gg_miss_fct(x = games, fct = Rating)
+```
+
+```{r}
+# Write a function to calculate NA's or missing values
+count_NAs <- function(var) {
+# Counts missing values in each variable
+#
+# Args:
+#   var: variable in a vector form
+#
+# Returns:
+#   Number of missing values in each variable
+    sprintf('There are %d missing values', sum(is.na(var)))
+}
+```
+
+```{r}
+lapply(games, count_NAs)
+```
+
+There are many missing values almost in every variable. For instance, there are 269 observations with unknown release date. Also, there are massive missing values in the variables like Critic_Score, Critic_Count, User_Score, User_Count, Developer and Rating. **Since most of the missing values are in categorical variables**, we cannot simply replace/fill. We will drop/omit those missing values.
+
+Before dropping the cases (rows) with NA's, we would like to know how much our data set would be affected by doing that:
+
+```{r}
+# learn the index of the cases which had no NA's: complete cases
+complete_index <- complete.cases(games)
+```
+
+First look at the distribution of numeric variables before and after removing
+all possible NA's containing rows
+```{r}
+games_no_na <- na.omit(games)
+
+# User and Critic Count
+par(mfrow = c(2,2))
+hist(log(games$User_Count), main = '')
+hist(log(games_no_na$User_Count), main = '')
+hist(log(games$Critic_Count), main = '')
+hist(log(games_no_na$Critic_Count), main = '')
+```
+
+```{r}
+# User and Critic Score
+par(mfrow = c(2,2))
+hist(log(games$User_Score), main = '')
+hist(log(games_no_na$User_Score), main = '')
+hist(log(games$Critic_Score), main = '')
+hist(log(games_no_na$Critic_Score), main = '')
+```
+
+```{r}
+# Sales
+par(mfrow=c(2,2))
+hist(log(games$Global_Sales), main = '')
+hist(log(games_no_na$Global_Sales), main = '')
+hist(log(games$Other_Sales), main = '')
+hist(log(games_no_na$Other_Sales), main = '')
+```
+
+```{r}
+# Sales
+par(mfrow=c(3,2))
+hist(log(games$NA_Sales), main = '')
+hist(log(games_no_na$NA_Sales), main = '')
+hist(log(games$JP_Sales), main = '')
+hist(log(games_no_na$JP_Sales), main = '')
+hist(log(games$EU_Sales), main = '')
+hist(log(games_no_na$EU_Sales), main = '')
+```
+
+Also analyze if the proportions of each level in categorical variables changed when you dropped the rows conatining NA's
+```{r}
+# genre - one of the most important variables
+prop.table(table(games$Genre))
+prop.table(table(games_no_na$Genre))
+```
+
+```{r}
+# platform company
+prop.table(table(games$Platform_Company))
+prop.table(table(games_no_na$Platform_Company))
+```
+
+```{r}
+# decade
+prop.table(table(games$Decade))
+prop.table(table(games_no_na$Decade))
+```
+
+
+We will just repeat two ANOVA hypothesis testings on the significance of the interaction terms:
+```{r}
+games_melted <- games %>% select(NA_Sales, EU_Sales, JP_Sales, Other_Sales,
+                                 Genre, Decade) %>% 
+    melt(measure.vars = c('NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales'))
+colnames(games_melted) <- c('Genre', 'Decade', 'Region', 'Sales')
+
+games_no_na_melted <- games_no_na %>% select(NA_Sales, EU_Sales, 
+                                             JP_Sales, Other_Sales,
+                                             Genre, Decade) %>% 
+    melt(measure.vars = c('NA_Sales', 'EU_Sales', 'JP_Sales', 'Other_Sales'))
+colnames(games_no_na_melted) <- c('Genre', 'Decade', 'Region', 'Sales')
+```
+
+```{r}
+# ANOVA: Genre vs Region
+anov1 <- lm(log(Sales + 0.000001) ~ Genre*Region, data = games_melted)
+anova(anov1)
+```
+
+```{r}
+# ANOVA: Genre vs Region
+anov2 <- lm(log(Sales + 0.000001) ~ Genre*Region, data = games_no_na_melted)
+anova(anov2)
+```
+
+```{r}
+# the same model without 0's
+anov3 <- lm(log(Sales) ~ Genre*Region, 
+            data = games_melted[games_melted$Sales != 0,])
+anova(anov3)
+```
+
+Repeat the same analysis for Genre and Decade:
+```{r}
+anov4 <- lm(log(Sales + 0.000001) ~ Genre*Decade, data = games_melted)
+anova(anov4)
+
+anov5 <- lm(log(Sales + 0.000001) ~ Genre*Decade, data = games_no_na_melted)
+anova(anov5)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+games <- na.omit(games)
+games %>% glimpse()
+```
+
+```{r}
+games %>% summary()
+```
+
+After removing all NA cases, we were left with 6825 observations. Hence %59.06 of the inital observations were dropped.
+
+**Sales Variables:** The sales variables are the main variables of interest for the purpose of our project.
+
+Globally, the mean number of units sold per game was 0.78 million, and between 0.11 million to 0.75 million units were sold of 50% of the games listed in the dataset (refer to summary output). On average, 0.39 million units were sold in North America, 0.24 million units were sold in Europe, 0.06 million units were sold in Japan, and 0.08 million units were sold in other parts of the world. In contrast, the maximum value for Global_Sales is 82.53 million, indicating the presence of outliers.
+
+We sort the dataset by Global_Sales and view the tail to find potential outliers.
+
+```{r}
+ord = order(games$Global_Sales)
+ordered_by_global_sales = games[ord, ]
+tail(ordered_by_global_sales)
+```
+
+We have identified “Wii Sports”, “Mario Kart Wii”, and “Wii Sports Resort” as the games with the highest number of units sold at 82.53 million, 35.52 million, and 32.77 million respectively.
+
+We next visualize the distribution of the sales variables.
+```{r}
+par(mfrow = c(3,2))
+
+hist(games$Global_Sales, main = "Global Sales", 
+     xlab = "Sales in millions", col= brewer.pal(n = 3, name="Set2"))
+hist(games$NA_Sales, main = "North America Sales", 
+     xlab = "Sales in millions", col= brewer.pal(n = 3, name="Set2"))
+hist(games$JP_Sales, main = "Japan Sales", 
+     xlab = "Sales in millions", col= brewer.pal(n = 3, name="Set2"))
+hist(games$EU_Sales, main = "EU Sales", 
+     xlab = "Sales in millions", col= brewer.pal(n = 3, name="Set2"))
+hist(games$Other_Sales, main = "Other Sales", 
+     xlab = "Sales in millions", col= brewer.pal(n = 3, name="Set2"))
+```
+
+We observed that the distributions of the five sales variables are highly right-skewed. 
+
+Taking into consideration the outliers and the right-skew in the distributions, we explored the froot, flog, square root and log transformations. We found that re-expressing the sales data as log values were the most successful in making the distributions approximately symmetric. We will report the log-transformation below:
+
+```{r}
+#Save log versions of the sales variables as new variables
+games["log_Global_Sales"] = log(games$Global_Sales)
+games["log_NA_Sales"] = log(games$NA_Sales)
+games["log_JP_Sales"] = log(games$JP_Sales)
+games["log_EU_Sales"] = log(games$EU_Sales)
+games["log_Other_Sales"] = log(games$Other_Sales)
+```
+
+Having log transformed the sales variables, we visualize the distributions.
+```{r}
+#Visualize the distribution of the log sales variables
+par(mfrow = c(3,2))
+hist(games$log_Global_Sales, main = "Global Sales", 
+     xlab = "Log sales", col= brewer.pal(n = 3, name="Set2"))
+hist(games$log_NA_Sales, main = "North America Sales", 
+     xlab = "Log sales", col= brewer.pal(n = 3, name="Set2"))
+hist(games$log_JP_Sales, main = "Japan Sales", 
+     xlab = "Log sales", col= brewer.pal(n = 3, name="Set2"))
+hist(games$log_EU_Sales, main = "EU Sales", 
+     xlab = "Log sales", col= brewer.pal(n = 3, name="Set2"))
+hist(games$log_Other_Sales, main = "Other Sales", 
+     xlab = "Log sales", col= brewer.pal(n = 3, name="Set2"))
+par(mfrow=c(1,1))
+```
+The sales variables are approximately more normally distributed after the log transformation.
+
+
+**Genre:**
+
+```{r}
+attach(games)
+#Compute and store means
+NA_genre_m = aggregate(NA_Sales, list(Genre), FUN = mean)
+JP_genre_m = aggregate(JP_Sales, list(Genre), FUN = mean)
+EU_genre_m = aggregate(EU_Sales, list(Genre), FUN = mean)
+Other_genre_m = aggregate(Other_Sales, list(Genre), FUN = mean)
+Global_genre_m = aggregate(Global_Sales, list(Genre), FUN = mean)
+
+genres = NA_genre_m[,1]
+
+#Compute and store proportions
+NA_genre_p = NA_genre_m[,2] / sum(NA_genre_m[,2])
+JP_genre_p = JP_genre_m[,2] / sum(JP_genre_m[,2])
+EU_genre_p = EU_genre_m[,2] / sum(EU_genre_m[,2])
+Other_genre_p = Other_genre_m[,2] / sum(Other_genre_m[,2])
+Global_genre_p = Global_genre_m[,2] / sum(Global_genre_m[,2])
+
+#Create table of proportions
+prop_t_genres = cbind(NA_genre_p, JP_genre_p, EU_genre_p, Other_genre_p, Global_genre_p)
+rownames(prop_t_genres) = genres
+colnames(prop_t_genres) = c("NA", "JP", "EU", "Other", "Global")
+
+#Compute percentages
+genres_percent = round(prop_t_genres*100, digits = 2)
+genres_percent
+
+detach(games)
+```
+
+The miscellaneous category has the most units sold in all regions outside of Japan. In North America, the top three genres following the misc. are shooter games (11.92%), sports games (11.13%), and platform games (11.02%). We observe a similar pattern in the EU where the top three genres are shooter games (11.53%), racing games(10.81%), and platform games (10.27%), and in the rest of the world (Other_Sales) where genres with most units sold were shooter games (11.69%), racing games (11.53%), and sports games (11.46%). In contrast, the most popular games in Japan are in the Role-Playing (20.04% of all sales), Puzzle (14.79%), and Platform (12.46%) genres, followed by Simulation games which bring 12.46% of sales.
+
+Globally, shooter games, platform games, and sports games are the genres with highest numbers of units sold following the miscellaneous category.
+
+We visualize the data for video game sale percentages by genre and region. 
+```{r}
+par(mar = c(5,4,4,10))
+barplot(genres_percent, col=brewer.pal(n=12, name="Paired"), 
+        xlab = "Region", 
+        ylab = "Percent",
+        main = "Video game sale percentages by genre and region", 
+        legend.text = genres,
+        args.legend = list(x = "right",bty='n', inset=c(-0.50,0), xpd = TRUE))
+```
+
+We observe differences between the percentages of games of certain genres between the regions, but we cannot be certain if these differences are significant at this stage.
+
+*User and Critic Variables:* The games had on average 25 reviews from critics and 27 reviews from users on Metacritic.
+
+```{r}
+par(mfrow=c(1,2))
+par(las=1) 
+
+hist(games$Critic_Score, main = "Critic Score", ylim=c(0,1300),xlim=c(0,100),
+     xlab = "Score", col= brewer.pal(n = 7, name="Blues"))
+abline(v = mean(games$Critic_Score),lwd=2)
+abline(v = median(games$Critic_Score), lty = 2,lwd=2)
+
+hist(games$User_Score, main = "User Score",  ylim=c(0,1300), xlim=c(0,100),
+     xlab = "Score", col= brewer.pal(n = 7, name="Blues"))
+abline(v = mean(games$User_Score), lwd=2)
+abline(v = median(games$User_Score), lty = 2, lwd=2)
+
+```
+
+We find that both the User Score and the Critic Score variables were left-skewed, meaning that critics and users alike rated games more positively than negatively overall.
+
+*Year_of_Release:* The games in the dataset were released between 1985 and 2016.  2008, 2007 and 2005 were the years with the highest number of games released: 592, 590, and 562 respectively.
+
+*Publisher & Developer:* The games were created by 1289 unique companies (developers) and marketed and sold by 262 companies (publishers). The publisher and developer overlapped for 720 games.
+
+*Rating:* 2377 games were rated Teen, 2082 games were rated Everyone, 1433 games were rated Mature, and 930 games were rated Everyone 10+. One game was rated Adult Only, one game was rated Kids to Adults and one game was Rating Pending. 
+
+*Platform:* The dataset has information on games played on 17 different platforms. The majority of the games in the dataset run on the PS2 console (16.7%), the X360 console (12.57%), the PS3 console (11.27%), the PC console (9.54%), and the Xbox console (8.28%).
+
+#### Data manipulation: 
+
+For more flexibility we can generate new variables out of given 16. Below are given the mechanisms we used to generate those additional features:
+
+Write the reasoning here why do we need this KPI/variable?
+
+1. Year since release: numeric variable
+```{r}
+games$Year_since_Release <- max(games$Year_of_Release) - games$Year_of_Release
+```
+
+2. Year to decade categorical
+```{r}
+to_decade <- function(var) {
+    var[var <= 1980] <- '70s'
+    var[1980 < var & var <= 1990] <- '80s'
+    var[1990 < var & var <= 2000] <- '90s'
+    var[2000 < var & var <= 2010] <- '00s'
+    var[2010 < var & var <= 2020] <- '10s'
+    
+    return(var)
+}
+```
+
+
+```{r}
+games$Decade <- to_decade(games$Year_of_Release)
+table(games$Decade)
+
+games_no_na$Decade <- to_decade(games_no_na$Year_of_Release)
+```
+
+
+3. Platform Developer company
+
+```{r}
+platform_company <- function(var) {
+    var <- as.character(var)
+    
+    var[var == "3DS"|
+        var == "DS"|
+        var == "GBA"|
+        var == "GC"|
+        var == "Wii"|
+        var == "WiiU"] = 'Nintendo'
+    var[var == "DC"] = 'Sega'
+    var[var == "PC"|
+        var == "X360"|
+        var == "XB"|
+        var == "XOne"] = 'Microsoft'
+    var[var == "PS"|
+        var == "PS2"|
+        var == "PS3"|
+        var == "PS4"|
+        var == "PSP"|
+        var == "PSV"] = 'SONY'
+    
+    return(var)
+}
+```
+
+```{r}
+games$Platform_Company <- platform_company(games$Platform)
+table(games$Platform_Company)
+
+games_no_na$Platform_Company <- platform_company(games_no_na$Platform)
+```
+
+```{r}
+par(las = 1)
+boxplot(games$log_Global_Sales~games$Platform_Company, horizontal=TRUE, 
+        xlab="Log Global Sales", ylab="", 
+        main = "Log global sales across console companies ", 
+        col = brewer.pal(4, "Purples"), cex.axis = 0.65 )
+```
+
+
+4. Platform Generation
+
+As video games and consoles are often split into groups based on certain properties  (ex. graphical output), we have decided to group our observations by their generation. 
+
+```{r}
+#Create new variable by generation of platforms
+platforms_gen <- function(var) {
+    var = as.character(var)
+    
+    var[var == "PS" | 
+        var == "PC"] = '5th Gen'
+    var[var == "DC" | 
+        var == "PS2" | 
+        var == "XB" | 
+        var == "GBA" | 
+        var == "GC"] = '6th Gen'
+    var[var == "DS" | 
+        var == "PS3" | 
+        var == "PSP" |
+        var == "Wii" |
+        var == "X360"] = '7th Gen'
+    var[var == "3DS" | 
+        var == "PS4" | 
+        var == "PSV" | 
+        var == "WiiU" | 
+        var == "XOne"] = '8th Gen'
+    
+    return(var)
+}
+```
+
+```{r}
+games$Platform_Gen <- platforms_gen(games$Platform)
+table(games$Platform_Gen)
+
+games_no_na$Platform_Gen <- platforms_gen(games_no_na$Platform)
+```
+Our data contains information on games from generations 5 through 8. 
+
+```{r}
+par(las=1)
+boxplot(games$log_Global_Sales~games$Platform_Gen, horizontal=TRUE, 
+        xlab="Log Global Sales", ylab="", main = "Log global sales across console generations ", 
+        col = brewer.pal(4, "PuBuGn"), cex.axis=0.65)
+
+```
+
+5. Variable by family of systems
+```{r}
+family_platforms <- function(var) {
+    var = as.character(var)
+    
+    var[var == "3DS" |
+        var ==  "DS"] = 'Nintendo_DS'
+    var[var == "DC" | 
+        var == "PC" | 
+        var == "GBA" | 
+        var == "GC"] = 'Misc'
+    var[var == "X360" |
+        var == "XB" |
+        var == "XOne"] = 'Microsoft_XBOX'
+    var[var == "PS" |
+        var == "PS2" |
+        var == "PS3" | 
+        var == "PS4" |
+        var == "PSP" |
+        var == "PSV"] = 'SONY_PS'
+    var[var == "Wii" |
+        var == "WiiU"] = 'Nintendo_Wii'
+    
+    return(var)
+}
+```
+
+```{r}
+games$Family_Platform <- family_platforms(games$Platform)
+table(games$Family_Platform)
+
+games_no_na$Family_Platform <- family_platforms(games_no_na$Platform)
+```
+
+
+
+
+6. Developer (publisher) country information
+```{r}
+developer_countries <- read.xls('data/Country_data.xlsx', header = TRUE)
+developer_countries %>% head()
+```
+
+Link this information to the developer variable: (we will actually refer to the top 10 largest video game developer companies in the world):
+```{r}
+filter_developer <- function(var, ids = as.numeric(rownames(games))) {
+    var <- as.character(var)
+    
+#Recode the subsidiaries as their parent company    
+    
+    var[grepl('Ubisoft', var)] <- 'Ubisoft'
+    var[grepl('Vivendi', var)] <- 'Ubisoft'
+    var[grepl('Ivory Tower', var)] <- 'Ubisoft'
+    var[grepl('Massive Entertainment', var)] <- 'Ubisoft'
+    var[grepl('Nadeo', var)] <- 'Ubisoft'
+    var[grepl('Red Storm', var)] <- 'Ubisoft'
+    var[grepl('RedLynx', var)] <- 'Ubisoft'
+    var[grepl('Microids', var)] <- 'Ubisoft'
+    var[grepl('Related Designs', var)] <- 'Ubisoft'
+    var[grepl('Sunflowers Interactive', var)] <- 'Ubisoft'
+    var[ids %in% c(2585, 6804)] <- 'Ubisoft' #games developed by Marvelous
+    var[ids == 3227] <- 'Ubisoft' #game developed by Media Vision
+    var[ids %in% c(4455, 7097, 7213)] <- 'Ubisoft' #games developed by Q entertainment
+    var[ids %in% c(8816, 11234)] <- 'Ubisoft' #games developed by Racjin
+    var[ids == 5039] <- 'Ubisoft' #games by Yuke's
+    var[ids == 11246] <- 'Ubisoft'
+    var[ids %in% c(12158, 14003)] <- 'Ubisoft' #Climax
+    var[ids %in% c(9025, 9794)] <- 'Ubisoft' #Kuju
+    var[ids == 6900] <- 'Ubisoft' #Sumo
+    var[ids %in% c(3133, 4934, 5181, 6076, 6685, 7700, 7998,
+                   9135, 9945, 10701, 11164, 14849)] <- 'Ubisoft' #Eurocom
+
+    
+    var[grepl('Nintendo', var)] <- 'Nintendo'
+    var[grepl('Monolith Soft', var)] <- 'Nintendo'
+    var[grepl('Retro Studios', var)] <- 'Nintendo'
+    var[grepl('Ambrella', var)] <- 'Nintendo'
+    var[grepl('Camelot Software Planning', var)] <- 'Nintendo'
+    var[grepl('Creatures', var)] <- 'Nintendo'
+    var[grepl('Game Freak', var)] <- 'Nintendo'
+    var[grepl('Creatures', var)] <- 'Nintendo'
+    var[grepl('Genius Sonority', var)] <- 'Nintendo'
+    var[grepl('Good-Feel', var)] <- 'Nintendo'
+    var[grepl('HAL', var)] <- 'Nintendo'
+    var[grepl('Intelligent Systems', var)] <- 'Nintendo'
+    var[grepl('Next Level Games', var)] <- 'Nintendo'
+    var[grepl('Sora', var)] <- 'Nintendo'
+    var[grepl('TOSE', var)] <- 'Nintendo'
+    var[ids %in% c(313, 554, 730)] <- 'Nintendo' #games developed by Capcom
+    var[ids %in% c(4121, 4619)] <- 'Nintendo' #games developed by Marvelous
+    var[ids == 6984 ] <- 'Nintendo' #game developed by Q Entertainment
+    var[ids == 6309] <- 'Nintendo' #FreeStyleGame
+    var[ids %in% c(4789, 5367)] <- 'Nintendo' #Kuju
+    var[ids %in% c(545, 3098, 3109, 4184)] <- 'Nintendo' #Artoon
+    var[grepl('n-Space', var)] <- 'Nintendo'
+    
+    
+    var[grepl('SONY', var)] <- 'SONY'
+    var[grepl('Sony', var)] <- 'SONY'
+    var[grepl('SCE', var)] <- 'SONY'
+    var[grepl('SIE', var)] <- 'SONY'
+    var[grepl('Bend', var)] <- 'SONY'
+    var[grepl('Insomniac', var)] <- 'SONY'
+    var[grepl('Media Molecule', var)] <- 'SONY'
+    var[grepl('Naughty Dog', var)] <- 'SONY'
+    var[grepl('Polyphony', var)] <- 'SONY'
+    var[grepl('Sucker', var)] <- 'SONY'
+    var[grepl('Bigbig', var)] <- 'SONY'
+    var[grepl('Evolution', var)] <- 'SONY'
+    var[grepl('Guerrilla', var)] <- 'SONY'
+    var[grepl('Incognito', var)] <- 'SONY'
+    var[grepl('Liverpool', var)] <- 'SONY'
+    var[grepl('Zipper', var)] <- 'SONY'
+    var[grepl('Clap Hanz', var)] <- 'SONY'
+    var[ids == 8837] <- 'SONY' #ALfa Systems, Oreshika game
+    var[ids == 3087] <- 'SONY' #Dimps, Japan Studio
+    var[ids == 7065] <- 'SONY' #Matrix Systems, Alundra game
+    var[ids == 10967] <- 'SONY' #Media Vision, Wild Arms
+    var[ids ==5456] <- 'SONY' #Shift, Ape Academy
+    var[grepl('Zener', var)] <- 'SONY'
+    var[grepl('Bluepoint', var)] <- 'SONY'
+    var[ids %in% c(4515, 7818, 8028)] <- 'SONY' #Harmonix
+    var[ids %in% c(3291, 4257, 9503)] <- 'SONY' #High Impact Games
+    var[grepl('Idol', var)] <- 'SONY'
+    var[grepl('Magic Pixel', var)] <- 'SONY'
+    #var[ids == 3885] <- 'SONY' #Mass Media
+    var[grepl('Ready to Dawn', var)] <- 'SONY'
+    var[ids %in% c(2979, 3341, 3680, 6765, 7509)] <- 'SONY' #Sanzaru Games
+    var[ids == 9843] <- 'SONY' #SuperVillain
+    var[grepl('Workshop', var)] <- 'SONY'
+    var[grepl('Zindagi', var)] <- 'SONY'
+    var[ids == 8802] <- 'SONY' #Climax
+    var[ids == 1596] <- 'SONY' #Double Eleven
+    var[ids == 13343] <- 'SONY' #FreeStyleGames
+    var[ids == 4560] <- 'SONY' #Frontier
+    #var[ids == 1115] <- 'SONY' #Ninja
+    var[ids == 909] <- 'SONY' #Sumo
+    var[ids %in% c(464, 1128)] <- 'SONY' #Quantic
+    var[grepl('989', var)] <- 'SONY'
+    var[grepl('Cohort', var)] <- 'SONY'
+    var[ids %in% c(2720, 5647, 7043)] <- 'SONY' #Game Republic
+    var[grepl('BottleRocket', var)] <- 'SONY'
+    var[ids %in% c(396, 6284, 8263)] <- 'SONY' #Eurocom
+    var[ids %in% c(8291, 4746)] <- 'SONY' #Nihilistic
+    var[ids %in% c(1588, 4428)] <- 'SONY' #Slant Six
+    var[grepl('SuperBot', var)] <- 'SONY'
+    var[ids %in% c(1823, 2394)] <- 'SONY' #UnitedFrontGames
+    var[grepl('Level 5', var)] <- 'SONY'
+    
+    
+    var[grepl('EA', var)] <- 'EA'
+    var[grepl('Electronic Arts', var)] <- 'EA'
+    var[grepl('DICE', var)] <- 'EA'
+    var[grepl('Ghost Games', var)] <- 'EA'
+    var[grepl('PopCap', var)] <- 'EA'
+    var[grepl('BioWare', var)] <- 'EA'
+    var[grepl('Frostbite', var)] <- 'EA'
+    var[ids == 1423] <- 'EA' #developed by Bluepoint
+    #var[ids %in% c(2119, 2201)] <- 'EA' #developed by Double Fine
+    var[ids == 740] <- 'EA' #developed by Harmonix
+    var[ids == 9777] <- 'EA' #developed by Sanzaru Games
+    var[grepl('Exient', var)] <- 'EA'
+    var[grepl('Maxis', var)] <- 'EA'
+    var[grepl('Black Box', var)] <- 'EA'
+    var[ids == 16314] <- 'EA' #Kuju
+    var[ids %in% c(405, 859, 2504, 2636, 2959, 3592, 4188,
+                   5235, 7435, 8924)] <- 'EA' #Eurocom
+    var[ids %in% c(6116, 4992, 2650)] <- 'EA' #Nihilistic
+
+    
+    var[grepl('Microsoft', var)] <- 'Microsoft'
+    var[grepl('343', var)] <- 'Microsoft'
+    var[grepl('Compulsion', var)] <- 'Microsoft'
+    var[grepl('Double Fine', var)] <- 'Microsoft'
+    var[grepl('Ninja Theory', var)] <- 'Microsoft'
+    var[grepl('Obsidian', var)] <- 'Microsoft'
+    var[grepl('Playground', var)] <- 'Microsoft'
+    var[grepl('Rare', var)] <- 'Microsoft'
+    var[grepl('Coalition', var)] <- 'Microsoft'
+    var[grepl('Turn', var)] <- 'Microsoft'
+    var[grepl('Indie', var)] <- 'Microsoft'
+    var[grepl('Bungie', var)] <- 'Microsoft'
+    var[grepl('Twisted', var)] <- 'Microsoft'
+    var[grepl('BigPark', var)] <- 'Microsoft'
+    var[grepl('Anvil', var)] <- 'Microsoft'
+    var[grepl('Ensemble', var)] <- 'Microsoft'
+    var[grepl('FASA', var)] <- 'Microsoft'
+    var[grepl('Good Science', var)] <- 'Microsoft'
+    var[grepl('Lionhead', var)] <- 'Microsoft'
+    var[ids == 1177] <- 'Microsoft'
+    var[ids == 10678] <- 'Microsoft' #developed by Media Vision
+    var[ids == 8981] <- 'Microsoft' #developed by Armature
+    var[ids %in% c(838, 2526, 7960)] <- 'Microsoft' #developed by Harmonix
+    var[ids %in% c(15061, 7826)] <- 'Microsoft' #developed by Climax
+    var[ids %in% c(676, 1138)] <- 'Microsoft' #developed by Frontier
+    var[ids == 13474] <- 'Microsoft' #Kuju
+    var[ids %in% c(2263, 3600, 7434)] <- 'Microsoft' #Artoon
+    var[ids == 1653] <- 'Microsoft' #Blitz
+    
+    
+    var[grepl('Epic Games', var)] <- 'Tencent'
+    var[grepl('Paradox', var)] <- 'Tencent'
+    
+    
+    var[grepl('Activision', var)] <- 'Activision Blizzard'
+    var[grepl('Blizzard', var)] <- 'Activision Blizzard'
+    var[grepl('Vicarious Visions', var)] <- 'Activision Blizzard'
+    var[grepl('Treyarch', var)] <- 'Activision Blizzard'
+    var[grepl('Beenox', var)] <- 'Activision Blizzard'
+    
+    
+    var[grepl('Namco', var)] <- 'Namco'
+    var[grepl('Bandai', var)] <- 'Namco'
+    var[grepl('Telenet', var)] <- 'Namco'
+    var[grepl('Atari', var)] <- 'Namco'
+    
+    
+    var[grepl('GungHo', var)] <- 'GungHo'
+    var[grepl('Game Arts', var)] <- 'GungHo'
+    var[grepl('Interchannel', var)] <- 'GungHo'
+    var[grepl('Grasshopper', var)] <- 'GungHo'
+    var[grepl('Acquire', var)] <- 'GungHo'
+    
+    
+    var[grepl('TT', var)] <- 'Warner Brothers'
+    var[grepl('Tales', var)] <- 'Warner Brothers'
+    var[grepl('Giants', var)] <- 'Warner Brothers'
+    var[grepl('Tales', var)] <- 'Warner Brothers'
+    var[grepl('Warthog', var)] <- 'Warner Brothers'
+    var[grepl('Avalanche', var)] <- 'Warner Brothers'
+    var[grepl('Monolith Productions', var)] <- 'Warner Brothers'
+    var[grepl('NetherRealm', var)] <- 'Warner Brothers'
+    var[grepl('Rocksteady', var)] <- 'Warner Brothers'
+    var[grepl('WB', var)] <- 'Warner Brothers'
+    var[grepl('Midway', var)] <- 'Warner Brothers'
+    var[grepl('Eidos', var)] <- 'Warner Brothers'
+    var[grepl('Turbine', var)] <- 'Warner Brothers'
+    
+    
+    var[grepl('Square', var)] <- 'Square Enix'
+    var[grepl('Taito', var)] <- 'Square Enix'
+    var[grepl('Tri-Ace', var)] <- 'Square Enix'
+    
+    
+    var[grepl('Visual Concepts', var)] <- 'Sega'
+    var[grepl('Sega', var)] <- 'Sega'
+    var[grepl('2K', var)] <- 'Sega'
+    var[grepl('Take-Two', var)] <- 'Sega'
+    var[grepl('Sonic', var)] <- 'Sega'
+    var[grepl('Kush', var)] <- 'Sega'
+    
+    
+    var[grepl('Volition Inc', var)] <- 'THQ'
+    var[grepl('THQ', var)] <- 'THQ'
+    var[grepl('Deep Silver', var)] <- 'THQ'
+    var[grepl('Pacific Coast', var)] <- 'THQ'
+    var[grepl('Relic', var)] <- 'THQ'
+    var[grepl('Vigil', var)] <- 'THQ'
+    var[grepl('Blue Tongue', var)] <- 'THQ'
+    var[grepl('Juice', var)] <- 'THQ'
+    var[grepl('Kaos', var)] <- 'THQ'
+    var[grepl('Paradigm', var)] <- 'THQ'
+    var[grepl('Mass Media', var)] <- 'THQ'
+    var[grepl('Helixe', var)] <- 'THQ'
+    var[grepl('Locomotive', var)] <- 'THQ'
+    var[grepl('Heavy Iron', var)] <- 'THQ'
+    var[grepl('Incinerator', var)] <- 'THQ'
+    var[grepl('Big Huge', var)] <- 'THQ'
+    var[grepl('Nordic', var)] <- 'THQ'
+    
+    
+    var[grepl('Konami', var)] <- 'Konami'
+    var[grepl('Kojima', var)] <- 'Konami'
+    
+    
+    var[grepl('Acclaim', var)] <- 'Disney'
+    var[grepl('Disney', var)] <- 'Disney'
+    var[grepl('Buena', var)] <- 'Disney'
+    var[grepl('Propaganda', var)] <- 'Disney'
+    var[grepl('TOYBOX', var)] <- 'Disney'
+    
+    
+    var[grepl('Capcom', var)] <- 'Capcom'
+    var[grepl('Blue Castle', var)] <- 'Capcom'
+    
+    
+#Recode as one of the top ten companies, or 'Other'
+    
+    var[!(var == 'EA' | var == 'SONY' | var == 'Nintendo' | 
+              var == 'Microsoft' | var == 'Ubisoft' | var == 'Tencent'
+          | var == 'Activision Blizzard' | var == 'Namco'
+          | var == 'Square Enix' | var == 'Sega')] <- 'Other'
+    
+    return(var)
+}
+```
+
+Needs more reasearch, later if we have time.
+
+```{r}
+games$Main_Developer <- filter_developer(games$Developer)
+table(games$Main_Developer)
+```
+
+2081 out of 6825 games in the dataset were developed by one of the top 10 video game companies.
+
+
+7. Game Developer country
+
+We created a country variable for the developer as the origin of the game might be a factor of consideration for potential buyers.
+
+```{r}
+#Create and populate new variable by the country information of the top 10 companies
+developer_country <- function(var) {
+    var[var == 'EA' |
+        var == 'Microsoft' | 
+        var == 'Activision Blizzard'] = 'US'
+    
+    var[var == 'Ubisoft'] = 'France'
+    
+    var[var == 'Nintendo' |
+        var == 'Namco' |
+        var == 'Square Enix' |
+        var == 'Sega'|
+        var == 'SONY' ] = 'Japan'
+    
+    var[var == 'Tencent'] = 'China'
+    
+    return(var)
+}
+```
+
+```{r}
+games$Developer_Country <- developer_country(games$Main_Developer)
+table(games$Developer_Country)
+```
+
+Out of the games that were developed by one of the top 10 video game companies,appoximately 62% was developed by the US, 19% by Japan, 18% by France, and 1% by China.
+
+8. Publisher main company
+
+We might also be interested in any potential associations related to the publisher company. We create a new variable Main_Publisher and use the filter_developer function to populate it by the top 10 companies and "Other".
+```{r}
+games$Main_Publisher <- filter_developer(games$Publisher)
+table(games$Main_Publisher)
+```
+
+
+
+
+
+#### Visual analysis of numerical variables:
+
+##### Correlation plot for numerical variables:
+```{r}
+games %>% select(Year_of_Release, Year_since_Release, NA_Sales,
+                 EU_Sales, JP_Sales, Global_Sales, Other_Sales, 
+                 User_Score, User_Count, Critic_Score, Critic_Count) %>%
+    cor() %>%  corrplot()
+```
+
+##### Correlation plot for categorical variables:
+```{r}
+games %>% select(Genre, Decade, Platform_Company, Platform_Gen,
+                 Family_Platform, Main_Developer, Developer_Country, 
+                 Main_Publisher, Rating) %>% 
+    transmute_if(is.character, as.factor) -> aa
+
+aa %>% mutate_all(as.numeric) %>% cor() %>% corrplot()
+```
+
+
+##### Release of games by years
+```{r}
+hist(x = games$Year_of_Release, col = brewer.pal(4, 'Purples'),
+     xlab = 'Year of Release',
+     main = 'Video game releases by year')
+```
+
+
+```{r}
+games %>% select(EU_Sales, JP_Sales, NA_Sales, Other_Sales) %>% 
+    melt() -> sales
+
+names(sales) <- c('Region', 'Sales')
+
+sales %>% ggplot(aes(x = log(Sales))) + 
+    geom_histogram(bins = 17, fill = 'skyblue2') +
+    facet_grid(.~Region) + 
+    theme_light() +
+    theme(panel.grid.major = element_blank())
+```
+
+
+
+
+We are mostly interested in global sales:
+(We might want to explore which variables affect the global sales)
+
+
+Plot Global sales by region:
+```{r}
+sales <- melt(games[,c(6:9)])
+names(sales) <- c('region', 'sales')
+
+sales %>% ggplot(aes(x = log(sales))) + 
+    geom_histogram(bins = 25, fill = 'deepskyblue2', col = 'blue') +
+    facet_grid(.~ region)
+```
+
+Box-plots by region:
+```{r}
+sales %>% ggplot(aes(y = log(sales), x = region)) + 
+    geom_boxplot(aes(fill = region)) + 
+    theme_light()
+```
+
+## Comments: 
+We would like to check if the sales differ significantly by region. There is no obvious heteroskedasticity. 
+
+
+
+
+Global sales by genre:
+```{r}
+games %>% ggplot(aes(y = log(Global_Sales), x = Genre)) + 
+    geom_boxplot(aes(fill = Genre)) + 
+    theme_light() +
+    theme(axis.text.x = element_blank())
+```
+
+
+
+
+Global sales by platform:
+
+```{r}
+games %>% ggplot(aes(y = log(Global_Sales), x = Platform_Gen)) + 
+    geom_boxplot(aes(fill = Platform_Gen)) + 
+    theme_light() +
+    theme(axis.text.x = element_blank())
+```
+
+There are more than platforms, so it would be better to group them: Done
+
+
+
+Global sales by platform developing companies:
+```{r}
+games %>% ggplot(aes(y = log(Global_Sales), x = Platform_Company)) + 
+    geom_boxplot(aes(fill = Platform_Company)) + 
+    theme_light() +
+    theme(axis.text.x = element_blank())
+```
+
+
+
+Global sales by platform family:
+
+```{r}
+games %>% ggplot(aes(y = log(Global_Sales), x = Family_Platform)) + 
+    geom_boxplot(aes(fill = Family_Platform)) + 
+    theme_light() +
+    theme(axis.text.x = element_blank())
+```
+
+
+
+
+
+Global sales by main developers:
+
+```{r}
+games %>% ggplot(aes(y = log(Global_Sales), x = Main_Developer)) + 
+    geom_boxplot(aes(fill = Main_Developer)) + 
+    theme_light() +
+    theme(axis.text.x = element_blank())
+```
+
+
+
+
+
+
+
+
+## Analysis of numerical variables:
+
+For EDA purposes only, fit their scatter plots and pairwise plots
+
+1. Pairwise plots
+```{r}
+# choose only numeric variables
+X <- games %>% 
+    select(Global_Sales, Year_since_Release, Critic_Count, 
+           Critic_Score, User_Count, User_Score) %>% 
+    mutate_at(c('Global_Sales'), log) 
+```
+
+```{r}
+pairs(X)
+```
+
+#### Comments: 
+There are possible linear relationships between Global_Sales and Critic_Count, Critic_Score and User_Score. More detailed:
+
+2. Critic_Score on Global_Sales
+```{r}
+plot(X$Critic_Score, X$Global_Sales, 
+     xlab = 'Critic_Score', ylab = 'Global_Sales')
+abline(lm(X$Global_Sales ~ X$Critic_Score), col = 'red')
+```
+
+
+
+
+3. User_Score on Global_Sales
+```{r}
+plot(X$User_Score, X$Global_Sales, 
+     xlab = 'User_Score', ylab = 'Global_Sales')
+abline(lm(X$Global_Sales ~ X$User_Score), col = 'red')
+```
+
+
+
+4. Global Sales by Critic_Count
+```{r}
+plot(X$Critic_Count, X$Global_Sales,
+     xlab = 'Critic_Count', ylab = 'Global_Sales')
+abline(lm(X$Global_Sales ~ X$Critic_Count), col = 'red')
+```
+
+
+
+
+5. Check for possible collinearity between numerical covariates:
+```{r}
+cor(X[,-1])
+```
+
+There is possible **collinearity** between Critic_Score and User_Score. If users give their scores after reviwing the critic score for that game, it's somehow biased and there is an obvious impact of critic score on the user score. This can be also checked by simple linear model fit:
+
+```{r}
+plot(X$Critic_Score, X$User_Score,
+     xlab = 'Critic Score', ylab = 'User Score')
+#fit without bias term (intercept)
+abline(lm(X$User_Score ~ X$Critic_Score - 1), 
+       col = 'red', lwd = 2)
+```
+
+```{r}
+lm1 <- lm(X$User_Score ~ X$Critic_Score - 1)
+lm1 %>% summary()
+```
+
+Fitting the linear model without an intercept results adjusted in R-square = 0.9683, which is a quite big amount. We can, further reveal if this possible collinearity if impacting the model fit in a bad way by analyzing the residual plots.
+
+
+
+
+5. Did Global sales change by year?
+```{r}
+games %>% filter(Global_Sales < 60) %>% 
+    ggplot(aes(x = as.factor(Year_of_Release), y = log(Global_Sales))) +
+    geom_boxplot(fill = 'steelblue3', col = 'steelblue4') + 
+    theme_light() +
+    xlab('Year_of_Release') +
+    theme(axis.text.x = element_text(angle = 90)) 
+```
+
+Significantly noticeable sales started in 1996, with 7 sales records in that year. Before 1996, there are only 4 records in 1985, 1988, 1991 and 1992. Visually there isn't much significant change in average global sales over time from 1996 to 2016. However, to be sure, we should run statistical tests in order sto ap/prove it.
+
+
+
+
+
+
+## Melt variables
+
+In order to include region as a new variable, we should melt sales by region:
+
+```{r}
+# exclude global sales, if you will need them, you can include them later:
+sales <- melt(games[,-c(1, 10)], 
+              measure.vars = c('NA_Sales', 'EU_Sales', 
+                               'JP_Sales', 'Other_Sales'))
+names(sales) <- c('Platform', 'Year_of_Release', 'Genre', 'Publisher',
+                  'Critic_Score', 'Critic_Count', 'User_Score',
+                  'User_Count', 'Developer', 'Rating', 'Year_since_Release',
+                  'Decade', 'Platform_Company', 'Platform_Gen',
+                  'Family_Platform', 'Main_Developer', 'Developer_Country',
+                  'Main_Publisher', 'Region', 'Sales')
+
+# write this variable into csv file
+write.csv(games, 'games.csv', row.names = FALSE)
+
+# write games variable into csv file
+write.csv(sales, 'sales.csv', row.names = FALSE)
+```
+
+
+
+
+
+#### Interaction plots
+
+1. Sales by Platform_Gen and Region
+```{r}
+# (!!!) before transforming the sales, add the minimum sales count for each 0 # value however, doesn't seem to be efficient 
+
+#min_non_zer_sales <- min(sales$Sales[sales$Sales != 0])
+#sales$Sales[sales$Sales == 0] <- min_non_zer_sales
+```
+
+
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Platform_Gen)) + 
+    geom_boxplot(aes(fill = Platform_Gen)) + 
+    facet_grid(.~Region) +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+##### Mosaic plot is already in Meltem's version
+
+
+
+
+2. Sales by Platform_Company and Region
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Platform_Company)) + 
+    geom_boxplot(aes(fill = Platform_Company)) + 
+    facet_grid(.~Region) +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+3. Sales by Family_Platform and Region
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Family_Platform)) + 
+    geom_boxplot(aes(fill = Family_Platform)) + 
+    facet_grid(.~Region) +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+4. Sales by Genre and Region
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Genre)) + 
+    geom_boxplot(aes(fill = Genre)) + 
+    facet_grid(.~Region) +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+
+5. Sales by Main_Developer and Region
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Main_Developer)) + 
+    geom_boxplot(aes(fill = Main_Developer)) + 
+    facet_grid(.~Region) +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+
+6. Sales by Developer_Country and Region ??? makes sense???
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Developer_Country)) + 
+    geom_boxplot(aes(fill = Developer_Country)) + 
+    facet_grid(.~Region) +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+
+7. Sales by Main_Developer and Platform_Compnany
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Platform_Company)) + 
+    geom_boxplot(aes(fill = Platform_Company)) + 
+    facet_grid(.~Region) +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+
+8. Sales by Genre and Platform_Company
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Genre)) + 
+    geom_boxplot(aes(fill = Genre)) + 
+    facet_grid(.~Platform_Company) +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+
+9. Sales by Genre and Main_Developer
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Genre)) + 
+    geom_boxplot(aes(fill = Genre)) + 
+    facet_grid(.~Main_Developer) +
+    theme_light() +
+    theme(axis.text.x = element_blank())
+```
+
+
+
+
+10. Sales by Genre and Decade
+```{r}
+sales %>% ggplot(aes(y = log(Sales), x = Genre)) + 
+    geom_boxplot(aes(fill = Genre)) + 
+    facet_grid(.~Decade) +
+    theme_light() +
+    theme(axis.text.x = element_text(angle = 90))
+```
+
+
+### Comments: We can keep all this example plots, so that we can choose *some* of them for our report later.
+
+
+
+
+
+
+
+##. Independence of Categorical variables
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
