@@ -1,0 +1,62 @@
+---
+title: "204 Project Proposal: Predicting Video Game Sales"
+author: "Gulzina Kuttubekova & Meltem Ozcan"
+date: "11/11/2019"
+output: pdf_document
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+\underline{\textbf{The Data}} 
+
+We will be using the “Video Game Sales with Ratings” dataset available on Kaggle: https://www.kaggle.com/rush4ratio/video-game-sales-with-ratings/download. The data was obtained by a web scrape of Metacritic and VGCharts along with manually entered the year of release values.The data was uploaded by Rush Kirubi, Gregory Smith and Kendall Gillies.
+
+The dataset contains 16719 observations and 16 variables. There are 5 categorical {Name, Platform, Genre, Publisher, Developer} and 11 numerical {Year, NA_Sales, EU_Sales, JP_Sales, Other_Sales, Global_Sales, Critic_Score, Critic_Count, User_Score, User_Count, Rating} variables. Global_Sales which is the sum of four regional sales variables for Japan, EU, North America, and the rest of the world. 
+
+We observed missing values in almost every variable. Since most of the missing values are in the categorical variables, we will drop/omit the observations with missing values. After removing NAs and blank cells, we were left with 6825 complete cases. 
+
+We created additional variables such as Platform_Generation (Fifth through Eighth), Family_of_Systems (Nintendo_Wii, Nintendo_DS, SONY_PS, Microsoft_XBOX), and Platform_Company (Nintendo, SONY, Microsoft and SEGA) which are console-related properties that might be associated with purchasing behavior. We also grouped the developers and publishers by their parent companies and coded for the top 10 video game companies versus an umbrella group for other companies.We used the Year_of_Release variable to compute a numeric variable Years_Since_Release and a categorical variable Release_Decaede.
+
+\underline{\textbf{The Problem}}
+
+Our main goal is to determine the properties of games that best predict sales globally and regionally. Additionally, we are interested in regional differences in sales based on variables such as genre, critic scores, video game generations, and developer company. 
+
+Hypotheses
+
+- We expect region, genre, family of systems, critic scores, and developer company to be significant predictors of global sales.
+- We expect significantly higher sales for certain genres in certain regions. For instance, shooter games will be more popular in North America compared to Japan. 
+- We expect that Japanese companies such as SEGA and Nintendo will account for a larger percentage of sales in Japan than Microsoft, an American company.
+- We expect regional differences in any correlations between the critic scores and regional sales variables i.e. there might be a stronger correlation between North America Sales and Critic Score than between Japan Sales and CriticScore as Metacritic might not be as widely used in gaming circles in Japan.
+
+
+\underline{\textbf{Tools and Models}}
+
+For EDA, we will visualize the data to observe associations between variables and check model assumptions (normality of errors, non-collinearity of variables etc.). We will make use of five point summaries and correlations, and we will transform data as necessary to satisfy model assumptions.
+
+As we are interested in predicting sales globally and regionally, we plan to fit Multiple Linear Regression models. We will take a subset of the data to train our model and test the model on the remaining data. We plan to start with regressing all possible covariates on global sales. After determining which variables are significant, we will go into a more detailed analyis, and use model selection methods such as AIC and BIC to choose the best model.
+
+To test for significant differences between groups we will use t-tests and ANOVAs after checking for the assumptions of ANOVA. If significant differences are found, we will run post-hoc tests (ex. pairwise comparisons or Tukey's HSD).
+
+\underline{\textbf{Potential Challenges}}
+
+We expect non-normality in the numeric variables, potential noise, and outliers. Many of the categorical variables have too many levels and we will need to reduce the number of levels to be able to run meaningful analyses.
+
+\underline{\textbf{Prior Analyses by Others (with references)}}
+
+This dataset has been available on Kaggle for  3 years and 216 kernels containing analyses on these data are viewable at the following link:  
+https://www.kaggle.com/rush4ratio/video-game-sales-with-ratings/kernels. 
+
+\underline{\textbf{Preliminary Analyses}}
+
+Using histogram and box-plots, we observed that the distributions of the five sales variables Global_Sales, NA_Sales, EU_Sales, JP_Sales, and Other_Sales, were highly right-skewed. Globally, the mean number of units sold per game was 0.78 million, and between 0.11 million to 0.75 million units were sold of 50% of the games listed in the dataset. In contrast, we identified “Wii Sports”, “Mario Kart Wii”, and “Wii Sports Resort” as the games with the highest number of units sold at 82.53 million, 35.52 million, and 32.77 million respectively. Taking into consideration the outliers and the right-skew in the distributions, we explored the froot, flog, square root and log transformations. We found that re-expressing the sales data as log values were the most successful in making the distributions approximately symmetric. On average, 0.39 million units were sold in North America, 0.24 million units were sold in Europe, 0.06 million units were sold in Japan, and 0.08 million units were sold in other parts of the world. 
+
+Globally, shooter games, platform games, and sports games are the genres with most sales. In North America, the top three genres with the most units sold are shooter games (11.92%), sports games (11.13%), and platform games (11.02%). We observe a similar pattern in the EU where the top three genres are shooter games (11.53%), racing games(10.81%), and platform games (10.27%), and in the rest of the world (Other_Sales) where genres with most units sold were shooter games (11.69%), racing games (11.53%), and sports games (11.46%). In contrast, the most popular games in Japan are in the Role-Playing (20.04% of all sales), Puzzle (14.79%), and Platform (12.46%) genres, followed by Simulation games which bring 12.46% of sales. 2377 games were rated Teen, 2082 games were rated Everyone, 1433 games were rated Mature, and 930 games were rated Everyone 10+. One game was rated Adult Only, one game was rated Kids to Adults and one game was Rating Pending. 
+
+The games had on average 25 reviews from critics and 27 reviews from users on Metacritic. We found that both the User Score and the Critic Score variables were left-skewed, meaning that critics and users alike rated games more positively than negatively overall.
+
+The majority of the games in the dataset run on the PS2 console (16.7%), the X360 console (12.57%), the PS3 console (11.27%), the PC console (9.54%), and the Xbox console (8.28%). The dataset contains 801 games from the Fifth, 2304 games from the Sixth, 2960 games from the Seventh, and 760 games from the Eighth generation. Globally, Nintendo’s Wii was the most popular family of systems and accounted for 31.31%  of all units sold, followed by Sony’s PlayStation (20.90%) and Microsoft’s Xbox (18.47%).
+
+Split of Duties
+
+We are equally committed to the project and will be splitting the duties evenly.
