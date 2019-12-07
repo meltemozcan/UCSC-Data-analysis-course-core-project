@@ -1,0 +1,187 @@
+---
+title: "Additional MLR on nonzero dataset"
+author: "Gulzina Kuttubekova, Meltem Ozcan"
+date: "12/6/2019"
+output: pdf_document
+---
+
+
+```{r, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape)
+library(gdata)
+library(RColorBrewer)
+library(visdat)
+library(naniar)
+library(inspectdf)
+library(corrplot)
+library(splitstackshape)
+library(lmtest)
+```
+
+
+```{r}
+games <- read.csv('games.csv')
+sales <- read.csv('sales.csv')
+```
+
+```{r}
+# filter zero sales out
+sales <- sales %>% select_all() %>% filter(Sales != 0)
+```
+
+```{r}
+set.seed(13)
+sets <- stratified(sales, c('Platform', 'Genre', 'Publisher',
+                            'Developer', 'Rating', 'Decade',
+                            'Platform_Company', 'Platform_Gen',
+                            'Family_Platform', 'Main_Developer',
+                            'Developer_Country', 'Main_Publisher',
+                            'Region'), 0.7, bothSets = TRUE)
+
+train_sales <- sets$SAMP1
+test_sales <- sets$SAMP2
+```
+
+
+# MLR 3 - on the dataset without zeros, interactions are kept
+```{r}
+mlr3_nonzero <- lm(log(Sales) ~ Region + Genre + Rating + 
+               Critic_Score + Platform_Gen +
+               Region:Genre, data = train_sales)
+mlr3_nonzero %>% summary()
+```
+
+```{r}
+anova(mlr3_nonzero)
+```
+ 
+We observed the same trend on assumptions violations! We'll check all possible model assessments at the end. 
+
+
+
+
+# MLR 4 - on the dataset without zeros, interactions are kept
+```{r}
+mlr4_nonzero <- lm(log(Sales) ~ Region + Genre + Rating + 
+               Main_Publisher + Platform_Gen +
+               Region:Genre + Region:Main_Publisher, data = train_sales)
+mlr4_nonzero %>% summary()
+```
+
+```{r}
+anova(mlr4_nonzero)
+```
+ AdjR6 dropped significantly!!!
+
+We observed the same trend on assumptions violations! We'll check all possible model assessments at the end. 
+
+
+
+
+
+
+# MLR 5
+```{r}
+mlr5_nonzero <- lm(log(Sales) ~ Region + Genre + Rating + 
+               Main_Developer + Platform_Company +
+               Region:Genre + Region:Main_Developer, data = train_sales)
+mlr5_nonzero %>% summary()
+```
+
+```{r}
+anova(mlr5_nonzero)
+```
+ Still all 5 variables including the interactions are significant. Adj-R^2 is 0.4094, dropped from mlr3 and mlr4. Model violations are the same.
+
+
+
+
+
+
+# MLR 6
+```{r}
+mlr6_nonzero <- lm(log(Sales) ~ Region + Genre + Rating + Region:Genre, 
+           data = train_sales)
+mlr6_nonzero %>% summary()
+```
+
+```{r}
+anova(mlr6_nonzero)
+```
+ Still all 3 variables including the interactions are significant. Adj-R^2 is really badddd, decreased from all previous cases. Model violations are the same.
+
+We observed the same trend on assumptions violations! We'll check all possible model assessments at the end. 
+
+
+# Model Comparison
+
+
+Predictions and RMSE:
+```{r}
+# rmse on train data
+sqrt(sum((mlr3_nonzero$fitted.values - train_sales$Sales)^2) / length(mlr3_nonzero$fitted.values))
+
+
+predicted_sales <- predict(mlr3_nonzero, test_sales[,c(3,5,10,14,19)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+```{r}
+# rmse on train data
+sqrt(sum((mlr4_nonzero$fitted.values - train_sales$Sales)^2) / length(mlr4_nonzero$fitted.values))
+
+
+predicted_sales <- predict(mlr4_nonzero, test_sales[,c(3,10,14,18,19)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+```{r}
+# rmse on train data
+sqrt(sum((mlr5_nonzero$fitted.values - train_sales$Sales)^2) / length(mlr5_nonzero$fitted.values))
+
+
+predicted_sales <- predict(mlr5_nonzero, test_sales[,c(3, 10, 16, 13, 19)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+```{r}
+# rmse on train data
+sqrt(sum((mlr6_nonzero$fitted.values - train_sales$Sales)^2) / length(mlr6_nonzero$fitted.values))
+
+
+predicted_sales <- predict(mlr6_nonzero, test_sales[,c(3, 10, 19)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+Create dataframe for model assessment:
+```{r}
+df <- data.frame(AIC = c(AIC(mlr3_nonzero), AIC(mlr4_nonzero), 
+                         AIC(mlr5_nonzero), AIC(mlr6_nonzero)),
+                 BIC = c(BIC(mlr3_nonzero), BIC(mlr4_nonzero),
+                         BIC(mlr5_nonzero), BIC(mlr6_nonzero)),
+                 AdjRsq = c(0.3097, 0.2877, 0.2795, 0.1949),
+                 trainRMSE = c(2.890188, 2.886228, 2.886106, 2.875492),
+                 testRMSE = c(2.837222, 2.951015, 2.929614, 2.986754))
+row.names(df) <- c('MLR3_nonzero', 'MLR4_nonzero', 
+                   'MLR5_nonzero', 'MLR6_nonzero')
+df
+```
+
+
+
+
+
