@@ -1,0 +1,167 @@
+---
+title: "MLR1-2 on nonzero dataset"
+author: "Gulzina Kuttubekova, Meltem Ozcan"
+date: "12/4/2019"
+output:
+  pdf_document: default
+  word_document: default
+---
+
+```{r, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(reshape)
+library(gdata)
+library(RColorBrewer)
+library(visdat)
+library(naniar)
+library(inspectdf)
+library(corrplot)
+library(splitstackshape)
+library(lmtest)
+```
+
+
+```{r}
+games <- read.csv('games.csv')
+sales <- read.csv('sales.csv')
+```
+
+```{r}
+# log-transform and remove zeros
+sales_nonzero <- sales %>% select_all() %>% 
+    filter(Sales != 0) 
+```
+
+
+```{r}
+set.seed(13)
+sets <- stratified(sales_nonzero, c('Platform', 'Genre', 'Publisher',
+                            'Developer', 'Rating', 'Decade',
+                            'Platform_Company', 'Platform_Gen',
+                            'Family_Platform', 'Main_Developer',
+                            'Developer_Country', 'Main_Publisher',
+                            'Region'), 0.7, bothSets = TRUE)
+
+train_sales <- sets$SAMP1
+test_sales <- sets$SAMP2
+```
+
+
+# MLR without interactions (for non-zero values)
+```{r}
+mlr_without_nonzero <- lm(log(Sales) ~ Genre + Critic_Score + Critic_Count +
+                              Rating +
+              Decade + Platform_Company + Platform_Gen + Family_Platform +
+              Main_Developer + Main_Publisher + Region, 
+              data = train_sales)
+mlr_without_nonzero %>% summary()
+```
+
+```{r}
+plot(mlr_without_nonzero)
+```
+
+
+# Check the real normality. On the 0.05 significance level, normality condition is still violated. But at least the Residual and QQ plots look nicer. 
+```{r}
+shapiro.test(mlr_without_nonzero$residuals
+             [sample(1:length(train_sales$Platform),5000)])
+```
+
+However, heteroskedacticity is still present. 
+```{r}
+bptest(mlr_without_nonzero)
+```
+
+# get the AIC and BIC 
+```{r}
+AIC(mlr_without_nonzero)
+BIC(mlr_without_nonzero)
+```
+
+```{r}
+# rmse on train data
+sqrt(sum((mlr_without_nonzero$fitted.values - train_sales$Sales)^2) /
+         length(mlr_without_nonzero$fitted.values))
+
+
+predicted_sales <- predict(mlr_without_nonzero,
+                           test_sales[,-c(1,2,4,7,8,9,11,17,20)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+
+
+
+
+# MLR with interactions (for non-zero values)
+```{r}
+mlr_with_nonzero <-  lm(log(Sales) ~ Genre + Critic_Score + Critic_Count + Rating +
+              Decade + Platform_Company + Platform_Gen + Family_Platform +
+              Main_Developer + Main_Publisher + Region +
+                  Genre:Region + Main_Developer:Region +
+                  Main_Publisher:Region + Genre:Decade, 
+              data = train_sales)
+mlr_with_nonzero %>% summary()
+```
+
+```{r}
+plot(mlr_with_nonzero)
+```
+
+# Check the real normality. On the 0.05 significance level, normality condition is still violated. But at least the Residual and QQ plots look nicer. 
+```{r}
+shapiro.test(mlr_with_nonzero$residuals
+             [sample(1:length(train_sales$Platform),5000)])
+```
+
+However, heteroskedacticity is still present. 
+```{r}
+bptest(mlr_with_nonzero)
+```
+
+# get the AIC and BIC 
+```{r}
+AIC(mlr_with_nonzero)
+BIC(mlr_with_nonzero)
+```
+
+```{r}
+# rmse on train data
+sqrt(sum((mlr_with_nonzero$fitted.values - train_sales$Sales)^2) /
+         length(mlr_with_nonzero$fitted.values))
+
+
+predicted_sales <- predict(mlr_with_nonzero,
+                           test_sales[,-c(1,2,4,7,8,9,11,17,20)])
+
+# rmse on test data
+sqrt(sum((predicted_sales - test_sales$Sales)^2) / length(predicted_sales))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
